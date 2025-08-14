@@ -1,7 +1,5 @@
-
 local Config = getgenv().Config
-assert(Config, "[ESP] Config table is missing in getgenv()!")
-
+assert(Config)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,10 +7,10 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local UserInput = game:GetService("UserInputService")
 
-
 local ESPObjects = {}
 local DrawObjects = {}
-
+local toggledSpeed = false
+local savedSpeed = 16
 
 local function PrintLoading()
     local barLength = 20
@@ -20,18 +18,16 @@ local function PrintLoading()
         local fill = string.rep("=", i)
         local empty = string.rep(" ", barLength - i)
         print(string.format("[%-20s] %d%%", fill..empty, math.floor((i/barLength)*100)))
-        task.wait(0.05)
+        task.wait(0.25)
     end
     print("[ESP] Loaded successfully!")
 end
 spawn(PrintLoading)
 
-
-local function AddHighlight(player)
+local function ApplyHighlight(player)
     if player == LocalPlayer then return end
     local char = player.Character
-    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-
+    if not char then return end
     if not ESPObjects[player] then
         local highlight = Instance.new("Highlight")
         highlight.Adornee = char
@@ -43,6 +39,7 @@ local function AddHighlight(player)
         ESPObjects[player] = highlight
     else
         ESPObjects[player].Adornee = char
+        ESPObjects[player].Enabled = Config.HighlightEnabled
     end
 end
 
@@ -59,24 +56,20 @@ local function RemoveESP(player)
     end
 end
 
-
 local function AddDrawESP(player)
     if player == LocalPlayer then return end
     local box = Drawing.new("Square")
     box.Thickness = 1
     box.Color = Color3.fromRGB(255, 255, 255)
     box.Filled = false
-
     local tracer = Drawing.new("Line")
     tracer.Thickness = 1
     tracer.Color = Color3.fromRGB(255, 255, 255)
-
     local nameTag = Drawing.new("Text")
     nameTag.Size = 14
     nameTag.Color = Color3.fromRGB(255, 255, 255)
     nameTag.Center = true
     nameTag.Outline = true
-
     local deadTag = Drawing.new("Text")
     deadTag.Size = 14
     deadTag.Color = Color3.fromRGB(255, 0, 0)
@@ -84,13 +77,32 @@ local function AddDrawESP(player)
     deadTag.Outline = true
     deadTag.Text = "DEAD"
     deadTag.Visible = false
-
     DrawObjects[player] = {Box = box, Tracer = tracer, Name = nameTag, Dead = deadTag}
+end
+
+local function SetupPlayer(player)
+    player.CharacterAdded:Connect(function(char)
+        repeat task.wait() until char:FindFirstChild("HumanoidRootPart")
+        ApplyHighlight(player)
+        AddDrawESP(player)
+    end)
+    if player.Character then
+        ApplyHighlight(player)
+        AddDrawESP(player)
+    end
+end
+
+Players.PlayerAdded:Connect(SetupPlayer)
+Players.PlayerRemoving:Connect(RemoveESP)
+for _, player in pairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer then SetupPlayer(player) end
 end
 
 RunService.RenderStepped:Connect(function()
     for player, highlight in pairs(ESPObjects) do
-        if highlight and highlight.Adornee and highlight.Adornee.Parent then
+        local char = player.Character
+        if char then
+            highlight.Adornee = char
             highlight.Enabled = Config.HighlightEnabled
             highlight.FillColor = Config.HighlightFillColor
             highlight.OutlineColor = Config.HighlightOutlineColor
@@ -103,34 +115,26 @@ RunService.RenderStepped:Connect(function()
         local hum = char and char:FindFirstChildOfClass("Humanoid")
         if hrp and head and hum then
             local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-            local headPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+            local headPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0,0.5,0))
             if Config.BoxEnabled and onScreen then
                 objs.Box.Visible = true
-                objs.Box.Size = Vector2.new(50, 100)
-                objs.Box.Position = Vector2.new(pos.X - 25, pos.Y - 50)
-            else
-                objs.Box.Visible = false
-            end
+                objs.Box.Size = Vector2.new(10,10)
+                objs.Box.Position = Vector2.new(pos.X-5,pos.Y-5)
+            else objs.Box.Visible = false end
             if Config.TracerEnabled and onScreen then
                 objs.Tracer.Visible = true
-                objs.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
-                objs.Tracer.To = Vector2.new(pos.X, pos.Y)
-            else
-                objs.Tracer.Visible = false
-            end
+                objs.Tracer.From = Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y)
+                objs.Tracer.To = Vector2.new(pos.X,pos.Y)
+            else objs.Tracer.Visible = false end
             if Config.NameEnabled and onScreen then
                 objs.Name.Visible = true
                 objs.Name.Text = player.Name
-                objs.Name.Position = Vector2.new(headPos.X, headPos.Y - 20)
-            else
-                objs.Name.Visible = false
-            end
+                objs.Name.Position = Vector2.new(headPos.X,headPos.Y-20)
+            else objs.Name.Visible = false end
             if hum.Health <= 0 and onScreen then
                 objs.Dead.Visible = true
-                objs.Dead.Position = Vector2.new(headPos.X, headPos.Y - 40)
-            else
-                objs.Dead.Visible = false
-            end
+                objs.Dead.Position = Vector2.new(headPos.X,headPos.Y-40)
+            else objs.Dead.Visible = false end
         else
             objs.Box.Visible = false
             objs.Tracer.Visible = false
@@ -140,29 +144,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-
-local function SetupPlayer(player)
-    player.CharacterAdded:Connect(function(char)
-        repeat task.wait() until char:FindFirstChild("HumanoidRootPart")
-        AddHighlight(player)
-        AddDrawESP(player)
-    end)
-    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        AddHighlight(player)
-        AddDrawESP(player)
-    end
-end
-
-Players.PlayerAdded:Connect(SetupPlayer)
-Players.PlayerRemoving:Connect(RemoveESP)
-
-for _, player in pairs(Players:GetPlayers()) do
-    if player ~= LocalPlayer then
-        SetupPlayer(player)
-    end
-end
-
-
 if LocalPlayer.Character then
     for _, part in ipairs(LocalPlayer.Character:GetChildren()) do
         if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
@@ -171,27 +152,21 @@ if LocalPlayer.Character then
     end
 end
 
-
-local toggledSpeed = false
-local savedSpeed = 16
-
-local function ToggleWalkSpeed()
-    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-    if hum then
-        if not toggledSpeed then
-            savedSpeed = hum.WalkSpeed
-            hum.WalkSpeed = Config.WalkSpeed
-            toggledSpeed = true
-        else
-            hum.WalkSpeed = savedSpeed
-            toggledSpeed = false
-        end
-    end
-end
-
-
-UserInput.InputBegan:Connect(function(input, gp)
+UserInput.InputBegan:Connect(function(input,gp)
     if not gp and input.KeyCode == Config.WalkKey then
-        ToggleWalkSpeed()
+        toggledSpeed = not toggledSpeed
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if LocalPlayer.Character then
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            if toggledSpeed then
+                hum.WalkSpeed = Config.WalkSpeed
+            else
+                hum.WalkSpeed = hum.WalkSpeed ~= savedSpeed and savedSpeed or hum.WalkSpeed
+            end
+        end
     end
 end)
