@@ -1,4 +1,6 @@
-assert(Config, "[ESP] Config table is missing!")
+local Config = getgenv().Config
+assert(Config, "[ESP] Config table is missing in getgenv()!")
+
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
