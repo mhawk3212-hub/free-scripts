@@ -283,7 +283,7 @@ end)
 -- teleport on CTRL + Click (directly to mouse target)
 UserInput.InputBegan:Connect(function(input, gp)
     if gp then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInput:IsKeyDown(Enum.KeyCode.LeftControl) then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInput:IsKeyDown(Enum.KeyCode.Q) then
         local char = LocalPlayer.Character
         if char and char:FindFirstChild("HumanoidRootPart") and Mouse.Target then
             local hrp = char.HumanoidRootPart
