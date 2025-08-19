@@ -254,8 +254,9 @@ UserInput.InputBegan:Connect(function(input, gp)
         local char = LocalPlayer.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
             local hrp = char.HumanoidRootPart
-            local normal = (hrp.Position - WallTarget.Position).Unit
-            hrp.CFrame = CFrame.new(WallTarget.Position + normal * (WallTarget.Size.Magnitude/2 + 3))
+            -- put player on top of the part
+            local topY = WallTarget.Position.Y + (WallTarget.Size.Y / 2) + 5
+            hrp.CFrame = CFrame.new(WallTarget.Position.X, topY, WallTarget.Position.Z)
         end
     end
 end)
