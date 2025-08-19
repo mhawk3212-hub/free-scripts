@@ -10,7 +10,7 @@
         SkinTone = BrickColor.new("Pastel brown"),
         WalkSpeed = 100,          
         WalkKey = Enum.KeyCode.K,
-        WallKey = Enum.KeyCode.B -- <== new for wall highlight/teleport
+        WallKey = Enum.KeyCode.B -- hold to highlight walls
     }
 ]]
 
@@ -123,6 +123,11 @@ local function SetupPlayer(player)
         repeat task.wait() until char:FindFirstChild("HumanoidRootPart")
         ApplyHighlight(player)
         AddDrawESP(player)
+
+        -- reset dead tag when new char spawns
+        if DrawObjects[player] and DrawObjects[player].Dead then
+            DrawObjects[player].Dead.Visible = false
+        end
     end)
     if player.Character then
         ApplyHighlight(player)
@@ -181,7 +186,9 @@ RunService.RenderStepped:Connect(function()
             if hum.Health <= 0 and onScreen then
                 objs.Dead.Visible = true
                 objs.Dead.Position = Vector2.new(headPos.X,headPos.Y-40)
-            else objs.Dead.Visible = false end
+            else
+                objs.Dead.Visible = false
+            end
         else
             objs.Box.Visible = false
             objs.Tracer.Visible = false
@@ -247,21 +254,33 @@ local function ClearWallHighlight()
     WallTarget = nil
 end
 
--- teleport when clicked
+-- teleport when clicked (top-of-wall)
 UserInput.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.UserInputType == Enum.UserInputType.MouseButton1 and WallTarget then
         local char = LocalPlayer.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
             local hrp = char.HumanoidRootPart
-            -- put player on top of the part
             local topY = WallTarget.Position.Y + (WallTarget.Size.Y / 2) + 5
             hrp.CFrame = CFrame.new(WallTarget.Position.X, topY, WallTarget.Position.Z)
         end
     end
 end)
 
--- update highlight while holding key
+-- CTRL + Click also teleports
+UserInput.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInput:IsKeyDown(Enum.KeyCode.LeftControl) then
+        local char = LocalPlayer.Character
+        if WallTarget and char and char:FindFirstChild("HumanoidRootPart") then
+            local hrp = char.HumanoidRootPart
+            local topY = WallTarget.Position.Y + (WallTarget.Size.Y / 2) + 5
+            hrp.CFrame = CFrame.new(WallTarget.Position.X, topY, WallTarget.Position.Z)
+        end
+    end
+end)
+
+-- update highlight while holding wall key
 RunService.RenderStepped:Connect(function()
     if UserInput:IsKeyDown(Config.WallKey) then
         local target = Mouse.Target
