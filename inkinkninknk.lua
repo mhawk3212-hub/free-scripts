@@ -1,19 +1,3 @@
---[[ 
-    Loader config (example):
-    getgenv().Config = {
-        HighlightEnabled = true,
-        BoxEnabled = true,
-        TracerEnabled = true,
-        NameEnabled = true,
-        HighlightFillColor = Color3.fromRGB(255, 0, 0),
-        HighlightOutlineColor = Color3.fromRGB(255, 255, 255),
-        SkinTone = BrickColor.new("Pastel brown"),
-        WalkSpeed = 100,          
-        WalkKey = Enum.KeyCode.K,
-        WallKey = Enum.KeyCode.B -- hold to highlight walls
-    }
-]]
-
 local Config = getgenv().Config
 assert(Config)
 
@@ -28,14 +12,9 @@ local ESPObjects = {}
 local DrawObjects = {}
 local toggledSpeed = false
 local savedSpeed = 16
-
--- wall highlight state
 local WallHighlight
 local WallTarget
 
------------------------------------------------------
--- Loading bar
------------------------------------------------------
 local function PrintLoading()
     local barLength = 20
     for i = 0, barLength do
@@ -48,14 +27,10 @@ local function PrintLoading()
 end
 task.spawn(PrintLoading)
 
------------------------------------------------------
--- Highlight Player Characters
------------------------------------------------------
 local function ApplyHighlight(player)
     if player == LocalPlayer then return end
     local char = player.Character
     if not char then return end
-
     if not ESPObjects[player] then
         local highlight = Instance.new("Highlight")
         highlight.Adornee = char
@@ -63,7 +38,7 @@ local function ApplyHighlight(player)
         highlight.OutlineTransparency = 0
         highlight.FillColor = Config.HighlightFillColor
         highlight.OutlineColor = Config.HighlightOutlineColor
-        highlight.Parent = char -- ✅ parent to character
+        highlight.Parent = char
         ESPObjects[player] = highlight
     else
         ESPObjects[player].Adornee = char
@@ -84,9 +59,6 @@ local function RemoveESP(player)
     end
 end
 
------------------------------------------------------
--- Drawing ESP (box, tracer, name, dead-tag)
------------------------------------------------------
 local function AddDrawESP(player)
     if player == LocalPlayer then return end
     local box = Drawing.new("Square")
@@ -115,16 +87,11 @@ local function AddDrawESP(player)
     DrawObjects[player] = {Box = box, Tracer = tracer, Name = nameTag, Dead = deadTag}
 end
 
------------------------------------------------------
--- Player setup
------------------------------------------------------
 local function SetupPlayer(player)
     player.CharacterAdded:Connect(function(char)
         repeat task.wait() until char:FindFirstChild("HumanoidRootPart")
         ApplyHighlight(player)
         AddDrawESP(player)
-
-        -- reset dead tag when new char spawns
         if DrawObjects[player] and DrawObjects[player].Dead then
             DrawObjects[player].Dead.Visible = false
         end
@@ -141,11 +108,7 @@ for _, player in pairs(Players:GetPlayers()) do
     if player ~= LocalPlayer then SetupPlayer(player) end
 end
 
------------------------------------------------------
--- Main ESP updater
------------------------------------------------------
 RunService.RenderStepped:Connect(function()
-    -- update highlights
     for player, highlight in pairs(ESPObjects) do
         local char = player.Character
         if char then
@@ -156,7 +119,6 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- update drawing objects
     for player, objs in pairs(DrawObjects) do
         local char = player.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -165,29 +127,24 @@ RunService.RenderStepped:Connect(function()
         if hrp and head and hum then
             local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
             local headPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0,0.5,0))
-            if Config.BoxEnabled and onScreen then
-                objs.Box.Visible = true
+            objs.Box.Visible = Config.BoxEnabled and onScreen
+            if objs.Box.Visible then
                 objs.Box.Size = Vector2.new(10,10)
                 objs.Box.Position = Vector2.new(pos.X-5,pos.Y-5)
-            else objs.Box.Visible = false end
-
-            if Config.TracerEnabled and onScreen then
-                objs.Tracer.Visible = true
+            end
+            objs.Tracer.Visible = Config.TracerEnabled and onScreen
+            if objs.Tracer.Visible then
                 objs.Tracer.From = Vector2.new(Camera.ViewportSize.X/2,Camera.ViewportSize.Y)
                 objs.Tracer.To = Vector2.new(pos.X,pos.Y)
-            else objs.Tracer.Visible = false end
-
-            if Config.NameEnabled and onScreen then
-                objs.Name.Visible = true
+            end
+            objs.Name.Visible = Config.NameEnabled and onScreen
+            if objs.Name.Visible then
                 objs.Name.Text = player.Name
                 objs.Name.Position = Vector2.new(headPos.X,headPos.Y-20)
-            else objs.Name.Visible = false end
-
-            if hum.Health <= 0 and onScreen then
-                objs.Dead.Visible = true
+            end
+            objs.Dead.Visible = hum.Health <= 0 and onScreen
+            if objs.Dead.Visible then
                 objs.Dead.Position = Vector2.new(headPos.X,headPos.Y-40)
-            else
-                objs.Dead.Visible = false
             end
         else
             objs.Box.Visible = false
@@ -198,9 +155,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
------------------------------------------------------
--- Change local player skin tone
------------------------------------------------------
 if LocalPlayer.Character then
     for _, part in ipairs(LocalPlayer.Character:GetChildren()) do
         if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
@@ -209,9 +163,6 @@ if LocalPlayer.Character then
     end
 end
 
------------------------------------------------------
--- Walkspeed toggle
------------------------------------------------------
 UserInput.InputBegan:Connect(function(input,gp)
     if not gp and input.KeyCode == Config.WalkKey then
         toggledSpeed = not toggledSpeed
@@ -231,9 +182,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
------------------------------------------------------
--- Wall Highlight + Teleport System
------------------------------------------------------
 local function HighlightWall(part)
     if not WallHighlight then
         WallHighlight = Instance.new("Highlight")
@@ -254,10 +202,9 @@ local function ClearWallHighlight()
     WallTarget = nil
 end
 
--- teleport when clicked (top-of-wall)
 UserInput.InputBegan:Connect(function(input, gp)
     if gp then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and WallTarget then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInput:IsKeyDown(Config.WallKey) and WallTarget then
         local char = LocalPlayer.Character
         if char and char:FindFirstChild("HumanoidRootPart") then
             local hrp = char.HumanoidRootPart
@@ -267,33 +214,6 @@ UserInput.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- teleport on B + Click (top of wall)
-UserInput.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInput:IsKeyDown(Config.WallKey) then
-        local char = LocalPlayer.Character
-        if char and char:FindFirstChild("HumanoidRootPart") and WallTarget then
-            local hrp = char.HumanoidRootPart
-            local topY = WallTarget.Position.Y + (WallTarget.Size.Y / 2) + 5
-            hrp.CFrame = CFrame.new(WallTarget.Position.X, topY, WallTarget.Position.Z)
-        end
-    end
-end)
-
--- teleport on CTRL + Click (directly to mouse target)
-UserInput.InputBegan:Connect(function(input, gp)
-    if gp then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInput:IsKeyDown(Enum.KeyCode.Q) then
-        local char = LocalPlayer.Character
-        if char and char:FindFirstChild("HumanoidRootPart") and Mouse.Target then
-            local hrp = char.HumanoidRootPart
-            hrp.CFrame = CFrame.new(Mouse.Target.Position)
-        end
-    end
-end)
-
-
--- update highlight while holding wall key
 RunService.RenderStepped:Connect(function()
     if UserInput:IsKeyDown(Config.WallKey) then
         local target = Mouse.Target
