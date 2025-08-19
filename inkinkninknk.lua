@@ -267,18 +267,31 @@ UserInput.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- CTRL + Click also teleports
+-- teleport on B + Click (top of wall)
 UserInput.InputBegan:Connect(function(input, gp)
     if gp then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInput:IsKeyDown(Enum.KeyCode.LeftControl) then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInput:IsKeyDown(Config.WallKey) then
         local char = LocalPlayer.Character
-        if WallTarget and char and char:FindFirstChild("HumanoidRootPart") then
+        if char and char:FindFirstChild("HumanoidRootPart") and WallTarget then
             local hrp = char.HumanoidRootPart
             local topY = WallTarget.Position.Y + (WallTarget.Size.Y / 2) + 5
             hrp.CFrame = CFrame.new(WallTarget.Position.X, topY, WallTarget.Position.Z)
         end
     end
 end)
+
+-- teleport on CTRL + Click (directly to mouse target)
+UserInput.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInput:IsKeyDown(Enum.KeyCode.LeftControl) then
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") and Mouse.Target then
+            local hrp = char.HumanoidRootPart
+            hrp.CFrame = CFrame.new(Mouse.Target.Position)
+        end
+    end
+end)
+
 
 -- update highlight while holding wall key
 RunService.RenderStepped:Connect(function()
