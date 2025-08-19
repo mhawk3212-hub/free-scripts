@@ -11,17 +11,11 @@ local Mouse = LocalPlayer:GetMouse()
 local ESPObjects = {}
 local DrawObjects = {}
 local toggledSpeed = false
-local savedSpeed = 16
+local originalSpeed = nil
 local WallHighlight
 local WallTarget
-local lastUpdate = 0
-
 local positionHistory = {}
-local maxHistory = 60 -- last ~2 seconds
-local movementDrawings = {}
-local lastCircleTime = 0
-local circleInterval = 2
-local lastPosition = nil
+local maxHistory = 60
 
 local function ApplyHighlight(player)
     if player == LocalPlayer then return end
@@ -113,19 +107,17 @@ if LocalPlayer.Character then
 end
 
 UserInput.InputBegan:Connect(function(input,gp)
-    if not gp and input.KeyCode == Config.WalkKey then
-        toggledSpeed = not toggledSpeed
-    end
-end)
-
-RunService.RenderStepped:Connect(function()
-    if LocalPlayer.Character then
-        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then
-            if toggledSpeed then
-                hum.WalkSpeed = Config.WalkSpeed
-            else
-                hum.WalkSpeed = hum.WalkSpeed ~= savedSpeed and savedSpeed or hum.WalkSpeed
+    if gp then return end
+    if input.KeyCode == Config.WalkKey then
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                if not originalSpeed then
+                    originalSpeed = hum.WalkSpeed
+                end
+                toggledSpeed = not toggledSpeed
+                hum.WalkSpeed = toggledSpeed and Config.WalkSpeed or originalSpeed
             end
         end
     end
@@ -163,15 +155,24 @@ UserInput.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- Anti-fall using position history
 RunService.RenderStepped:Connect(function()
-    if not LocalPlayer.Character then return end
-    local hrp = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+    local target = Mouse.Target
+    if UserInput:IsKeyDown(Config.WallKey) and target and target:IsA("BasePart") and not target:IsDescendantOf(LocalPlayer.Character) then
+        HighlightWall(target)
+    else
+        ClearWallHighlight()
+    end
 
-    table.insert(positionHistory, hrp.Position)
-    if #positionHistory > maxHistory then
-        table.remove(positionHistory, 1)
+    -- Store position history for anti-fall
+    local char = LocalPlayer.Character
+    if char then
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            table.insert(positionHistory, hrp.Position)
+            if #positionHistory > maxHistory then
+                table.remove(positionHistory, 1)
+            end
+        end
     end
 end)
 
@@ -179,32 +180,17 @@ UserInput.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.G then
         local char = LocalPlayer.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then
-            local lastSafe = positionHistory[1] or char.HumanoidRootPart.Position
-            char.HumanoidRootPart.CFrame = CFrame.new(lastSafe)
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp and #positionHistory > 0 then
+                hrp.CFrame = CFrame.new(positionHistory[1])
+            end
         end
     end
 end)
 
--- Main ESP + Wall Highlight + Movement Drawing
+-- ESP for other players
 RunService.RenderStepped:Connect(function()
-    local delta = tick() - lastUpdate
-    if delta < 0.03 then return end
-    lastUpdate = tick()
-
-    -- Wall Highlight
-    if UserInput:IsKeyDown(Config.WallKey) then
-        local target = Mouse.Target
-        if target and target:IsA("BasePart") and not target:IsDescendantOf(LocalPlayer.Character) then
-            HighlightWall(target)
-        else
-            ClearWallHighlight()
-        end
-    else
-        ClearWallHighlight()
-    end
-
-    -- Update ESP for other players
     for player, objs in pairs(DrawObjects) do
         local char = player.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -243,47 +229,6 @@ RunService.RenderStepped:Connect(function()
             objs.Tracer.Visible = false
             objs.Name.Visible = false
             objs.Dead.Visible = false
-        end
-    end
-
-    -- LocalPlayer Movement Drawing
-    if LocalPlayer.Character then
-        local char = LocalPlayer.Character
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hrp and hum then
-            -- Draw line when jumping
-            if hum:GetState() == Enum.HumanoidStateType.Jumping and lastPosition then
-                local line = Drawing.new("Line")
-                local startScreen, onScreen1 = Camera:WorldToViewportPoint(lastPosition)
-                local endScreen, onScreen2 = Camera:WorldToViewportPoint(hrp.Position)
-                if onScreen1 and onScreen2 then
-                    line.From = Vector2.new(startScreen.X, startScreen.Y)
-                    line.To = Vector2.new(endScreen.X, endScreen.Y)
-                    line.Color = Color3.fromRGB(255,0,0)
-                    line.Thickness = 2
-                    table.insert(movementDrawings, line)
-                    task.delay(5, function() line:Remove() end)
-                end
-            end
-
-            -- Draw circle every 2 seconds while walking
-            if tick() - lastCircleTime >= circleInterval and hum:GetState() == Enum.HumanoidStateType.Running then
-                lastCircleTime = tick()
-                local posScreen, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-                if onScreen then
-                    local circle = Drawing.new("Circle")
-                    circle.Position = Vector2.new(posScreen.X, posScreen.Y)
-                    circle.Radius = 6
-                    circle.Filled = false
-                    circle.Color = Color3.fromRGB(0,255,0)
-                    circle.Thickness = 2
-                    table.insert(movementDrawings, circle)
-                    task.delay(5, function() circle:Remove() end)
-                end
-            end
-
-            lastPosition = hrp.Position
         end
     end
 end)
