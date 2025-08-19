@@ -10,13 +10,14 @@ local Mouse = LocalPlayer:GetMouse()
 
 local ESPObjects = {}
 local DrawObjects = {}
-local toggledSpeed = false
-local originalSpeed = nil
 local WallHighlight
 local WallTarget
 local positionHistory = {}
 local maxHistory = 60
+local toggledSpeed = false
+local originalSpeed = nil
 
+-- Dynamic highlight creation
 local function ApplyHighlight(player)
     if player == LocalPlayer then return end
     local char = player.Character
@@ -31,8 +32,11 @@ local function ApplyHighlight(player)
         highlight.Parent = char
         ESPObjects[player] = highlight
     else
-        ESPObjects[player].Adornee = char
-        ESPObjects[player].Enabled = Config.HighlightEnabled
+        local h = ESPObjects[player]
+        h.Adornee = char
+        h.Enabled = Config.HighlightEnabled
+        h.FillColor = Config.HighlightFillColor
+        h.OutlineColor = Config.HighlightOutlineColor
     end
 end
 
@@ -51,6 +55,8 @@ end
 
 local function AddDrawESP(player)
     if player == LocalPlayer then return end
+    if DrawObjects[player] then return end
+
     local box = Drawing.new("Square")
     box.Thickness = 1
     box.Color = Color3.fromRGB(255, 255, 255)
@@ -98,15 +104,19 @@ for _, player in pairs(Players:GetPlayers()) do
     if player ~= LocalPlayer then SetupPlayer(player) end
 end
 
-if LocalPlayer.Character then
-    for _, part in ipairs(LocalPlayer.Character:GetChildren()) do
-        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-            part.BrickColor = Config.SkinTone
+-- Apply skin tone dynamically
+RunService.RenderStepped:Connect(function()
+    if LocalPlayer.Character and Config.SkinTone then
+        for _, part in ipairs(LocalPlayer.Character:GetChildren()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.BrickColor = Config.SkinTone
+            end
         end
     end
-end
+end)
 
-UserInput.InputBegan:Connect(function(input,gp)
+-- WalkSpeed toggle
+UserInput.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Config.WalkKey then
         local char = LocalPlayer.Character
@@ -123,6 +133,7 @@ UserInput.InputBegan:Connect(function(input,gp)
     end
 end)
 
+-- Wall highlight
 local function HighlightWall(part)
     if not WallHighlight then
         WallHighlight = Instance.new("Highlight")
@@ -143,6 +154,7 @@ local function ClearWallHighlight()
     WallTarget = nil
 end
 
+-- Wall teleport
 UserInput.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.UserInputType == Enum.UserInputType.MouseButton1 and UserInput:IsKeyDown(Config.WallKey) and WallTarget then
@@ -155,27 +167,7 @@ UserInput.InputBegan:Connect(function(input, gp)
     end
 end)
 
-RunService.RenderStepped:Connect(function()
-    local target = Mouse.Target
-    if UserInput:IsKeyDown(Config.WallKey) and target and target:IsA("BasePart") and not target:IsDescendantOf(LocalPlayer.Character) then
-        HighlightWall(target)
-    else
-        ClearWallHighlight()
-    end
-
-    -- Store position history for anti-fall
-    local char = LocalPlayer.Character
-    if char then
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            table.insert(positionHistory, hrp.Position)
-            if #positionHistory > maxHistory then
-                table.remove(positionHistory, 1)
-            end
-        end
-    end
-end)
-
+-- Anti-fall (G key)
 UserInput.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.KeyCode == Enum.KeyCode.G then
@@ -189,8 +181,28 @@ UserInput.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- ESP for other players
+-- Main loop
 RunService.RenderStepped:Connect(function()
+    local target = Mouse.Target
+    if UserInput:IsKeyDown(Config.WallKey) and target and target:IsA("BasePart") and not target:IsDescendantOf(LocalPlayer.Character) then
+        HighlightWall(target)
+    else
+        ClearWallHighlight()
+    end
+
+    -- Position history for anti-fall
+    local char = LocalPlayer.Character
+    if char then
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            table.insert(positionHistory, hrp.Position)
+            if #positionHistory > maxHistory then
+                table.remove(positionHistory, 1)
+            end
+        end
+    end
+
+    -- Update other players' ESP dynamically
     for player, objs in pairs(DrawObjects) do
         local char = player.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -202,27 +214,41 @@ RunService.RenderStepped:Connect(function()
             local distance = (Camera.CFrame.Position - hrp.Position).Magnitude
             local size = math.clamp(50 / distance, 5, 15)
 
+            -- Box
             objs.Box.Visible = Config.BoxEnabled and onScreen
             if objs.Box.Visible then
                 objs.Box.Size = Vector2.new(size, size)
                 objs.Box.Position = Vector2.new(pos.X - size/2, pos.Y - size/2)
+                objs.Box.Color = Config.HighlightOutlineColor
             end
 
+            -- Tracer
             objs.Tracer.Visible = Config.TracerEnabled and onScreen
             if objs.Tracer.Visible then
                 objs.Tracer.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y)
                 objs.Tracer.To = Vector2.new(pos.X, pos.Y)
+                objs.Tracer.Color = Config.HighlightOutlineColor
             end
 
+            -- Name
             objs.Name.Visible = Config.NameEnabled and onScreen
             if objs.Name.Visible then
                 objs.Name.Text = player.Name
                 objs.Name.Position = Vector2.new(headPos.X, headPos.Y - size)
+                objs.Name.Color = Config.HighlightOutlineColor
             end
 
+            -- Dead
             objs.Dead.Visible = hum.Health <= 0 and onScreen
             if objs.Dead.Visible then
                 objs.Dead.Position = Vector2.new(headPos.X, headPos.Y - size*2)
+            end
+
+            -- Highlight player
+            if ESPObjects[player] then
+                ESPObjects[player].Enabled = Config.HighlightEnabled
+                ESPObjects[player].FillColor = Config.HighlightFillColor
+                ESPObjects[player].OutlineColor = Config.HighlightOutlineColor
             end
         else
             objs.Box.Visible = false
